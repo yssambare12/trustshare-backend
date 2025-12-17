@@ -59,7 +59,13 @@ const getFiles = async (req, res) => {
       ]
     });
 
-    res.json(files);
+    const filesWithExpiry = files.map(file => {
+      const fileObj = file.toObject();
+      fileObj.isExpired = file.expiresAt && new Date() > new Date(file.expiresAt);
+      return fileObj;
+    });
+
+    res.json(filesWithExpiry);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -81,7 +87,7 @@ const getFilesByUserId = async (req, res) => {
 
 const shareFile = async (req, res) => {
   try {
-    const { fileId, userIds, ownerId } = req.body;
+    const { fileId, userIds, ownerId, expiresAt } = req.body;
 
     if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
       return res.status(400).json({ error: "User IDs are required and must be an array" });
@@ -93,8 +99,24 @@ const shareFile = async (req, res) => {
       return res.status(404).json({ error: "File not found" });
     }
 
+    if (file.expiresAt !== null) {
+      return res.status(400).json({
+        error: "File has already been shared. Expiry cannot be modified."
+      });
+    }
+
     if (file.uploadedBy !== ownerId) {
       return res.status(403).json({ error: "Only owner can share" });
+    }
+
+    if (expiresAt) {
+      const expiryDate = new Date(expiresAt);
+      if (expiryDate <= new Date()) {
+        return res.status(400).json({
+          error: "Expiry date must be in the future"
+        });
+      }
+      file.expiresAt = expiryDate;
     }
 
     const existingShares = file.sharedWith || [];
@@ -112,7 +134,7 @@ const shareFile = async (req, res) => {
 
 const generateShareLink = async (req, res) => {
   try {
-    const { fileId } = req.body;
+    const { fileId, expiresAt } = req.body;
 
     const file = await File.findById(fileId);
 
@@ -120,11 +142,28 @@ const generateShareLink = async (req, res) => {
       return res.status(404).json({ error: "File not found" });
     }
 
+    if (file.shareToken !== null && file.expiresAt !== null) {
+      return res.status(400).json({
+        error: "Share link already generated. Expiry cannot be modified."
+      });
+    }
+
+    if (expiresAt) {
+      const expiryDate = new Date(expiresAt);
+      if (expiryDate <= new Date()) {
+        return res.status(400).json({
+          error: "Expiry date must be in the future"
+        });
+      }
+      file.expiresAt = expiryDate;
+    }
+
     const token = Math.random().toString(36).substring(2, 15);
     file.shareToken = token;
+    file.sharedAt = new Date();
     await file.save();
 
-    res.json({ token, fileId: file._id });
+    res.json({ token, fileId: file._id, expiresAt: file.expiresAt });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -149,6 +188,13 @@ const getFileByLink = async (req, res) => {
 
     if (!file) {
       return res.status(404).json({ error: "File not found or invalid share link" });
+    }
+
+    if (file.expiresAt && new Date() > new Date(file.expiresAt)) {
+      return res.status(410).json({
+        error: "This share link has expired",
+        expired: true
+      });
     }
 
     res.json(file);
@@ -177,6 +223,13 @@ const downloadFile = async (req, res) => {
 
     if (!isOwner && !isSharedWith) {
       return res.status(403).json({ error: "Access denied. You do not have permission to download this file." });
+    }
+
+    if (!isOwner && file.expiresAt && new Date() > new Date(file.expiresAt)) {
+      return res.status(410).json({
+        error: "This file share has expired",
+        expired: true
+      });
     }
 
     const filePath = path.join(__dirname, "..", "uploads", file.filename);
@@ -208,7 +261,11 @@ const getNotifications = async (req, res) => {
 
     const sharedFiles = await File.find({
       sharedWith: userId,
-      viewedBy: { $ne: userId }
+      viewedBy: { $ne: userId },
+      $or: [
+        { expiresAt: null },
+        { expiresAt: { $gt: new Date() } }
+      ]
     });
 
     res.json({

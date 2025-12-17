@@ -37,6 +37,10 @@ const fileSchema = new mongoose.Schema({
     type: [String],
     default: [],
   },
+  expiresAt: {
+    type: Date,
+    default: null,
+  },
   createdAt: {
     type: Date,
     default: Date.now,
