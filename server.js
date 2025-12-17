@@ -5,6 +5,7 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
 const User = require("./models/User");
 const File = require("./models/File");
 
@@ -13,6 +14,25 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production";
+
+const authMiddleware = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+
+    if (!token) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.userId = decoded.userId;
+    req.userEmail = decoded.email;
+    next();
+  } catch (error) {
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
+};
 
 const ALLOWED_FILE_TYPES = [
   'image/jpeg',
@@ -70,22 +90,71 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
-// Create a new user
-app.post("/users", async (req, res) => {
+app.post("/register", async (req, res) => {
   try {
-    const { email } = req.body;
-    const user = new User({ email });
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    }
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ error: "User already exists" });
+    }
+
+    const user = new User({ email, password });
     await user.save();
-    res.status(201).json(user);
+
+    const token = jwt.sign({ userId: user._id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+
+    res.status(201).json({
+      token,
+      userId: user._id,
+      email: user.email
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Get all users
-app.get("/users", async (req, res) => {
+app.post("/login", async (req, res) => {
   try {
-    const users = await User.find();
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
+
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
+
+    const token = jwt.sign({ userId: user._id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+
+    res.json({
+      token,
+      userId: user._id,
+      email: user.email
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/users", authMiddleware, async (req, res) => {
+  try {
+    const users = await User.find().select('-password');
     res.json(users);
   } catch (error) {
     res.status(500).json({ error: error.message });
