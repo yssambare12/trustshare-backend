@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const dotenv = require("dotenv");
 const multer = require("multer");
 const path = require("path");
+const fs = require("fs");
 const cors = require("cors");
 const User = require("./models/User");
 const File = require("./models/File");
@@ -222,6 +223,47 @@ app.get("/file-by-link/:token", async (req, res) => {
     }
 
     res.json(file);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/download/:fileId", async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(401).json({ error: "User ID is required" });
+    }
+
+    const file = await File.findById(fileId);
+
+    if (!file) {
+      return res.status(404).json({ error: "File not found" });
+    }
+
+    const isOwner = file.uploadedBy === userId;
+    const isSharedWith = file.sharedWith.includes(userId);
+
+    if (!isOwner && !isSharedWith) {
+      return res.status(403).json({ error: "Access denied. You do not have permission to download this file." });
+    }
+
+    const filePath = path.join(__dirname, "uploads", file.filename);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: "File not found on server" });
+    }
+
+    res.download(filePath, file.originalName, (err) => {
+      if (err) {
+        console.error("Download error:", err);
+        if (!res.headersSent) {
+          res.status(500).json({ error: "Error downloading file" });
+        }
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
