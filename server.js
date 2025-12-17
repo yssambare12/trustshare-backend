@@ -85,6 +85,43 @@ app.get("/files", async (req, res) => {
   }
 });
 
+app.post("/share", async (req, res) => {
+  try {
+    const { fileId, userIds, ownerId } = req.body;
+
+    const file = await File.findById(fileId);
+
+    if (!file) {
+      return res.status(404).json({ error: "File not found" });
+    }
+
+    if (file.uploadedBy !== ownerId) {
+      return res.status(403).json({ error: "Only owner can share" });
+    }
+
+    file.sharedWith = userIds;
+    await file.save();
+
+    res.json(file);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/files/:userId", async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const files = await File.find({
+      $or: [{ uploadedBy: userId }, { sharedWith: userId }],
+    });
+
+    res.json(files);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
