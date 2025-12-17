@@ -122,6 +122,56 @@ app.get("/files/:userId", async (req, res) => {
   }
 });
 
+app.post("/share-link", async (req, res) => {
+  try {
+    const { fileId } = req.body;
+
+    const file = await File.findById(fileId);
+
+    if (!file) {
+      return res.status(404).json({ error: "File not found" });
+    }
+
+    const token = Math.random().toString(36).substring(2, 15);
+    file.shareToken = token;
+    await file.save();
+
+    res.json({ token, fileId: file._id });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/file-by-link/:token", async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { userId } = req.query;
+
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(403).json({ error: "User not found" });
+    }
+
+    const file = await File.findOne({ shareToken: token });
+
+    if (!file) {
+      return res.status(404).json({ error: "File not found" });
+    }
+
+    if (
+      file.uploadedBy !== userId &&
+      !file.sharedWith.includes(userId)
+    ) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
+    res.json(file);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Start server
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

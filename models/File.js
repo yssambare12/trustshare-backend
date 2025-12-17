@@ -26,6 +26,10 @@ const fileSchema = new mongoose.Schema({
     type: [String],
     default: [],
   },
+  shareToken: {
+    type: String,
+    default: null,
+  },
   createdAt: {
     type: Date,
     default: Date.now,
