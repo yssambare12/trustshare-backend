@@ -13,6 +13,26 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+const ALLOWED_FILE_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'application/pdf',
+  'text/csv',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+  'application/zip',
+  'application/x-zip-compressed',
+  'application/json'
+];
+
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, "uploads/");
@@ -23,7 +43,21 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage });
+const fileFilter = (req, file, cb) => {
+  if (ALLOWED_FILE_TYPES.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error(`File type not allowed. Allowed types: images, PDF, CSV, Excel, Word, Text, ZIP, JSON`), false);
+  }
+};
+
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: {
+    fileSize: MAX_FILE_SIZE
+  }
+});
 
 // Connect to MongoDB
 mongoose
@@ -58,24 +92,43 @@ app.get("/users", async (req, res) => {
 });
 
 // Upload a file
-app.post("/upload", upload.single("file"), async (req, res) => {
-  try {
-    const { userId } = req.body;
+app.post("/upload", (req, res) => {
+  upload.single("file")(req, res, async (err) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ error: `File too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB` });
+      }
+      return res.status(400).json({ error: err.message });
+    } else if (err) {
+      return res.status(400).json({ error: err.message });
+    }
 
-    const fileData = new File({
-      filename: req.file.filename,
-      originalName: req.file.originalname,
-      size: req.file.size,
-      type: req.file.mimetype,
-      uploadedBy: userId,
-    });
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
 
-    await fileData.save();
+    try {
+      const { userId } = req.body;
 
-    res.status(201).json(fileData);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+      if (!userId) {
+        return res.status(400).json({ error: 'User ID is required' });
+      }
+
+      const fileData = new File({
+        filename: req.file.filename,
+        originalName: req.file.originalname,
+        size: req.file.size,
+        type: req.file.mimetype,
+        uploadedBy: userId,
+      });
+
+      await fileData.save();
+
+      res.status(201).json(fileData);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
 });
 
 app.get("/files", async (req, res) => {
