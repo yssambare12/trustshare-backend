@@ -134,7 +134,19 @@ app.post("/upload", (req, res) => {
 
 app.get("/files", async (req, res) => {
   try {
-    const files = await File.find();
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(401).json({ error: "User ID is required" });
+    }
+
+    const files = await File.find({
+      $or: [
+        { uploadedBy: userId },
+        { sharedWith: userId }
+      ]
+    });
+
     res.json(files);
   } catch (error) {
     res.status(500).json({ error: error.message });
