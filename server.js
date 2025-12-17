@@ -152,9 +152,11 @@ app.post("/login", async (req, res) => {
   }
 });
 
-app.get("/users", authMiddleware, async (req, res) => {
+app.get("/users", async (req, res) => {
   try {
-    const users = await User.find().select('-password');
+    const { excludeUserId } = req.query;
+    const query = excludeUserId ? { _id: { $ne: excludeUserId } } : {};
+    const users = await User.find(query).select('-password');
     res.json(users);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -243,10 +245,58 @@ app.post("/share", async (req, res) => {
     const existingShares = file.sharedWith || [];
     const newShares = [...existingShares, ...userIds];
     file.sharedWith = [...new Set(newShares)];
+    file.sharedAt = new Date();
 
     await file.save();
 
     res.json(file);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/notifications", async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(401).json({ error: "User ID is required" });
+    }
+
+    const sharedFiles = await File.find({
+      sharedWith: userId,
+      viewedBy: { $ne: userId }
+    });
+
+    res.json({
+      count: sharedFiles.length,
+      files: sharedFiles
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/mark-viewed", async (req, res) => {
+  try {
+    const { fileId, userId } = req.body;
+
+    if (!userId || !fileId) {
+      return res.status(400).json({ error: "User ID and File ID are required" });
+    }
+
+    const file = await File.findById(fileId);
+
+    if (!file) {
+      return res.status(404).json({ error: "File not found" });
+    }
+
+    if (!file.viewedBy.includes(userId)) {
+      file.viewedBy.push(userId);
+      await file.save();
+    }
+
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

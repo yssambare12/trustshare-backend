@@ -1,6 +1,5 @@
 const mongoose = require("mongoose");
 
-// File schema
 const fileSchema = new mongoose.Schema({
   filename: {
     type: String,
@@ -29,6 +28,14 @@ const fileSchema = new mongoose.Schema({
   shareToken: {
     type: String,
     default: null,
+  },
+  sharedAt: {
+    type: Date,
+    default: null,
+  },
+  viewedBy: {
+    type: [String],
+    default: [],
   },
   createdAt: {
     type: Date,
