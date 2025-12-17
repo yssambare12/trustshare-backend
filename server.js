@@ -157,6 +157,10 @@ app.post("/share", async (req, res) => {
   try {
     const { fileId, userIds, ownerId } = req.body;
 
+    if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({ error: "User IDs are required and must be an array" });
+    }
+
     const file = await File.findById(fileId);
 
     if (!file) {
@@ -167,7 +171,10 @@ app.post("/share", async (req, res) => {
       return res.status(403).json({ error: "Only owner can share" });
     }
 
-    file.sharedWith = userIds;
+    const existingShares = file.sharedWith || [];
+    const newShares = [...existingShares, ...userIds];
+    file.sharedWith = [...new Set(newShares)];
+
     await file.save();
 
     res.json(file);
@@ -215,23 +222,20 @@ app.get("/file-by-link/:token", async (req, res) => {
     const { token } = req.params;
     const { userId } = req.query;
 
+    if (!userId) {
+      return res.status(401).json({ error: "User ID is required" });
+    }
+
     const user = await User.findById(userId);
 
     if (!user) {
-      return res.status(403).json({ error: "User not found" });
+      return res.status(403).json({ error: "User not found. Only users with accounts can access shared files." });
     }
 
     const file = await File.findOne({ shareToken: token });
 
     if (!file) {
-      return res.status(404).json({ error: "File not found" });
-    }
-
-    if (
-      file.uploadedBy !== userId &&
-      !file.sharedWith.includes(userId)
-    ) {
-      return res.status(403).json({ error: "Access denied" });
+      return res.status(404).json({ error: "File not found or invalid share link" });
     }
 
     res.json(file);
