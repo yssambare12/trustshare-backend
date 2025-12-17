@@ -3,12 +3,14 @@ const mongoose = require("mongoose");
 const dotenv = require("dotenv");
 const multer = require("multer");
 const path = require("path");
+const cors = require("cors");
 const User = require("./models/User");
 const File = require("./models/File");
 
 dotenv.config();
 const app = express();
 
+app.use(cors());
 app.use(express.json());
 
 const storage = multer.diskStorage({
