@@ -4,7 +4,7 @@ Backend server for TrustShare - a secure file sharing platform.
 
 ## Links
 
-- **Live App**: [https://trustshare-lhbzbsciz-yogesh-sambares-projects.vercel.app/](https://trustshare-lhbzbsciz-yogesh-sambares-projects.vercel.app/)
+- **Live App**: [https://trustshare-kappa.vercel.app/](https://trustshare-kappa.vercel.app/)
 - **Frontend Repo**: [https://github.com/yssambare12/trustshare](https://github.com/yssambare12/trustshare)
 - **Backend Repo**: [https://github.com/yssambare12/trustshare-backend](https://github.com/yssambare12/trustshare-backend)
 
